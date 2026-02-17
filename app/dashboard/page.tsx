@@ -84,24 +84,7 @@ useEffect(() => {
 }, [])
 
   
-const addBookmark = async (e: React.FormEvent) => {
-  e.preventDefault()
-  if (!title.trim() || !url.trim() || !userId) return
 
-  const { error } = await supabase
-    .from('bookmarks')
-    .insert([
-      { title: title.trim(), url: url.trim(), user_id: userId }
-    ])
-
-  if (error) {
-    alert('Error saving bookmark')
-    return
-  }
-
-  setTitle('')
-  setUrl('')
-}
 
   // ❌ DELETE (Realtime only – no optimistic to avoid flicker)
   const deleteBookmark = async (id: string) => {
