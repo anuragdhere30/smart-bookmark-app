@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, ExternalLink, MousePointer2 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -14,103 +14,77 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
 
-  // 🔥 INIT + REALTIME
-useEffect(() => {
-  let channel: any
-
-  const init = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push('/')
-      return
-    }
-
-    setUserId(user.id)
-
+  // 1. Move fetchBookmarks to the top to fix the "Used before declaration" error
+  const fetchBookmarks = useCallback(async (uid: string) => {
     const { data } = await supabase
       .from('bookmarks')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', uid)
       .order('created_at', { ascending: false })
-
     setBookmarks(data || [])
-    setLoading(false)
+  }, [])
 
-    // 🔥 Remove ALL existing channels first
-    supabase.getChannels().forEach((ch) => {
-      supabase.removeChannel(ch)
-    })
+  // 2. Single Unified Effect for Auth and Real-time
+  useEffect(() => {
+    let channel: any
 
-    channel = supabase
-      .channel(`bookmarks-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'bookmarks',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          setBookmarks((prev) => {
-            if (prev.some((b) => b.id === payload.new.id)) return prev
-            return [payload.new, ...prev]
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'bookmarks',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          setBookmarks((prev) =>
-            prev.filter((b) => b.id !== payload.old.id)
-          )
-        }
-      )
-      .subscribe()
-  }
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/')
+        return
+      }
+      
+      setUserId(user.id)
+      await fetchBookmarks(user.id)
+      setLoading(false)
 
-  init()
+      // CRITICAL: This is the ONLY place where the UI list updates.
+      // This ensures Tab A and Tab B stay in sync instantly.
+      channel = supabase
+        .channel(`user-bookmarks-${user.id}`)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'bookmarks', 
+          filter: `user_id=eq.${user.id}` 
+        }, (payload) => {
+          console.log('Real-time change detected:', payload)
+          fetchBookmarks(user.id)
+        })
+        .subscribe()
+    }
 
-  return () => {
-    if (channel) supabase.removeChannel(channel)
-  }
-}, [])
+    init()
 
-  
-const addBookmark = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!title.trim() || !url.trim() || !userId) return;
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [router, fetchBookmarks])
 
-  const currentTitle = title;
-  const currentUrl = url;
-  
-  // 1. Clear the inputs immediately for a snappy feel
-  setTitle('');
-  setUrl('');
+  const addBookmark = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !url.trim() || !userId) return;
 
-  // 2. ONLY do the database insert. 
-  // DO NOT call setBookmarks here.
-  const { error } = await supabase
-    .from('bookmarks')
-    .insert([{ title: currentTitle, url: currentUrl, user_id: userId }]);
+    const currentTitle = title;
+    const currentUrl = url;
+    
+    // Clear inputs immediately for "snappy" feeling
+    setTitle('');
+    setUrl('');
 
-  if (error) {
-    console.error('Insert error:', error.message);
-    alert("Error saving bookmark");
-    // Optionally put the text back in the inputs if it fails
-    setTitle(currentTitle);
-    setUrl(currentUrl);
-  }
-};
+    // Insert only. The Real-time listener handles the state update to avoid duplicates.
+    const { error } = await supabase
+      .from('bookmarks')
+      .insert([{ title: currentTitle, url: currentUrl, user_id: userId }])
 
-  // ❌ DELETE (Realtime only – no optimistic to avoid flicker)
+    if (error) {
+      alert("Error saving bookmark");
+      setTitle(currentTitle);
+      setUrl(currentUrl);
+    }
+  };
+
   const deleteBookmark = async (id: string) => {
     const { error } = await supabase
       .from('bookmarks')
@@ -135,24 +109,30 @@ const addBookmark = async (e: React.FormEvent) => {
       <div className="max-w-6xl mx-auto">
 
         <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white">
+          <motion.h1 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl font-bold text-white"
+          >
             Smart <span className="text-blue-500">Vault</span>
-          </h1>
+          </motion.h1>
           <p className="text-slate-400 mt-2">
             Real-time Library: {bookmarks.length} links
           </p>
         </div>
 
         {/* FORM */}
-        <form
+        <motion.form
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           onSubmit={addBookmark}
-          className="bg-slate-900/50 border border-white/10 p-3 rounded-2xl mb-14 flex flex-col md:flex-row gap-3"
+          className="bg-slate-900/50 border border-white/10 p-3 rounded-2xl mb-14 flex flex-col md:flex-row gap-3 shadow-xl"
         >
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title"
-            className="flex-1 bg-slate-950 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-blue-500"
+            placeholder="Website Title"
+            className="flex-1 bg-slate-950 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-blue-500 transition-all"
             required
           />
 
@@ -161,56 +141,73 @@ const addBookmark = async (e: React.FormEvent) => {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com"
             type="url"
-            className="flex-1 bg-slate-950 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-blue-500"
+            className="flex-1 bg-slate-950 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-blue-500 transition-all"
             required
           />
 
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 transition"
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-8 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
           >
             <Plus size={18} /> Save
           </button>
-        </form>
+        </motion.form>
 
         {/* BOOKMARK GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-  {bookmarks.map((b) => (
-    <motion.div
-      key={b.id}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
-      className="group bg-slate-900/60 border border-white/10 p-6 rounded-2xl hover:border-blue-500/40 transition"
-    >
-      <div className="flex flex-col h-full">
-        <div className="flex justify-between items-start mb-4">
-          <MousePointer2 size={18} className="text-blue-400" />
-          <button
-            onClick={() => deleteBookmark(b.id)}
-            className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition"
+        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode='popLayout'>
+            {bookmarks.map((b) => (
+              <motion.div
+                key={b.id}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+                className="group bg-slate-900/60 border border-white/10 p-6 rounded-2xl hover:border-blue-500/40 transition-all shadow-lg"
+              >
+                <div className="flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                      <MousePointer2 size={18} className="text-blue-400" />
+                    </div>
+                    <button
+                      onClick={() => deleteBookmark(b.id)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all p-1"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+
+                  <h3 className="font-semibold text-white truncate mb-2">
+                    {b.title}
+                  </h3>
+
+                  <div className="mt-auto">
+                    <a
+                      href={b.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 text-xs truncate hover:underline flex items-center gap-1 w-fit"
+                    >
+                      {b.url} <ExternalLink size={12} />
+                    </a>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+
+        {bookmarks.length === 0 && !loading && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            className="text-center py-20 border-2 border-dashed border-white/5 rounded-3xl"
           >
-            <Trash2 size={18} />
-          </button>
-        </div>
-
-        <h3 className="font-semibold text-white truncate mb-2">
-          {b.title}
-        </h3>
-
-        <a
-          href={b.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-500 text-xs truncate hover:underline flex items-center gap-1"
-        >
-          {b.url} <ExternalLink size={12} />
-        </a>
-      </div>
-    </motion.div>
-  ))}
-</div>
-
+            <p className="text-slate-500 italic">No bookmarks yet. Add your first link above!</p>
+          </motion.div>
+        )}
       </div>
     </div>
   )

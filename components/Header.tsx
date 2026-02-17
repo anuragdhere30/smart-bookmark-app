@@ -29,8 +29,15 @@ export default function Header() {
   }, [])
 
 const handleLogin = async () => {
+  // Detects if we are on localhost or live production
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
   await supabase.auth.signInWithOAuth({
-    provider: 'google'
+    provider: 'google',
+    options: {
+      // Points to http://localhost:3000 locally OR https://your-app.vercel.app live
+      redirectTo: `${origin}/auth/callback`,
+    }
   })
 }
 
