@@ -17,12 +17,11 @@ export default function Dashboard() {
   // 🔥 INIT + REALTIME
 useEffect(() => {
   let channel: any
-  let isMounted = true
 
   const init = async () => {
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user || !isMounted) {
+    if (!user) {
       router.push('/')
       return
     }
@@ -35,14 +34,13 @@ useEffect(() => {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (isMounted) {
-      setBookmarks(data || [])
-      setLoading(false)
-    }
+    setBookmarks(data || [])
+    setLoading(false)
 
-    // Remove existing channel before creating new one
-    const existing = supabase.getChannels()
-    existing.forEach((ch) => supabase.removeChannel(ch))
+    // 🔥 Remove ALL existing channels first
+    supabase.getChannels().forEach((ch) => {
+      supabase.removeChannel(ch)
+    })
 
     channel = supabase
       .channel(`bookmarks-${user.id}`)
@@ -81,7 +79,6 @@ useEffect(() => {
   init()
 
   return () => {
-    isMounted = false
     if (channel) supabase.removeChannel(channel)
   }
 }, [])
