@@ -84,44 +84,27 @@ export default function Dashboard() {
   }, [router])
 
   // ➕ ADD (Optimistic + Simple)
-  const addBookmark = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim() || !url.trim() || !userId) return
-
-    const optimisticId = crypto.randomUUID()
-
-    const optimisticBookmark = {
-      id: optimisticId,
-      title: title.trim(),
-      url: url.trim(),
-      user_id: userId,
-      created_at: new Date().toISOString(),
-    }
-
-    // instant UI update
-    setBookmarks((prev) => [optimisticBookmark, ...prev])
-    setTitle('')
-    setUrl('')
-
-    const { data, error } = await supabase
-      .from('bookmarks')
-      .insert([
-        { title: optimisticBookmark.title, url: optimisticBookmark.url, user_id: userId }
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      setBookmarks((prev) => prev.filter((b) => b.id !== optimisticId))
-      alert('Error saving bookmark')
-      return
-    }
-
-    // replace optimistic with real DB row
-    setBookmarks((prev) =>
-      prev.map((b) => (b.id === optimisticId ? data : b))
-    )
+const addBookmark = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!title.trim() || !url.trim() || !userId) {
+    console.error("Missing fields or User ID");
+    return;
   }
+
+  const { data, error } = await supabase
+    .from('bookmarks')
+    .insert([{ title, url, user_id: userId }])
+    .select(); // Returns the inserted row to confirm success
+
+  if (error) {
+    console.error('Supabase Insert Error:', error.message, error.details);
+    alert(`Save failed: ${error.message}`);
+  } else {
+    console.log('Successfully saved:', data);
+    setTitle('');
+    setUrl('');
+  }
+};
 
   // ❌ DELETE (Optimistic + Simple)
   const deleteBookmark = async (id: string) => {
