@@ -84,7 +84,31 @@ useEffect(() => {
 }, [])
 
   
+const addBookmark = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!title.trim() || !url.trim() || !userId) return;
 
+  const currentTitle = title;
+  const currentUrl = url;
+  
+  // 1. Clear the inputs immediately for a snappy feel
+  setTitle('');
+  setUrl('');
+
+  // 2. ONLY do the database insert. 
+  // DO NOT call setBookmarks here.
+  const { error } = await supabase
+    .from('bookmarks')
+    .insert([{ title: currentTitle, url: currentUrl, user_id: userId }]);
+
+  if (error) {
+    console.error('Insert error:', error.message);
+    alert("Error saving bookmark");
+    // Optionally put the text back in the inputs if it fails
+    setTitle(currentTitle);
+    setUrl(currentUrl);
+  }
+};
 
   // ❌ DELETE (Realtime only – no optimistic to avoid flicker)
   const deleteBookmark = async (id: string) => {
