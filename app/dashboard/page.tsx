@@ -15,73 +15,76 @@ export default function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null)
 
   // 🔥 INIT + REALTIME
-  useEffect(() => {
-    let channel: any
+useEffect(() => {
+  let channel: any
+  let isMounted = true
 
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
 
-      if (!user) {
-        router.push('/')
-        return
-      }
+    if (!user || !isMounted) {
+      router.push('/')
+      return
+    }
 
-      setUserId(user.id)
+    setUserId(user.id)
 
-      const { data } = await supabase
-        .from('bookmarks')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('bookmarks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
 
+    if (isMounted) {
       setBookmarks(data || [])
       setLoading(false)
-
-      // REALTIME: Direct state updates (no refetch)
-      channel = supabase
-        .channel(`bookmarks-${user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'bookmarks',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-
-            if (payload.eventType === 'INSERT') {
-              setBookmarks((prev) => {
-                // prevent duplicate if optimistic already added
-                if (prev.some((b) => b.id === payload.new.id)) return prev
-                return [payload.new, ...prev]
-              })
-            }
-
-            if (payload.eventType === 'DELETE') {
-              setBookmarks((prev) =>
-                prev.filter((b) => b.id !== payload.old.id)
-              )
-            }
-
-            if (payload.eventType === 'UPDATE') {
-              setBookmarks((prev) =>
-                prev.map((b) =>
-                  b.id === payload.new.id ? payload.new : b
-                )
-              )
-            }
-          }
-        )
-        .subscribe()
     }
 
-    init()
+    // Remove existing channel before creating new one
+    const existing = supabase.getChannels()
+    existing.forEach((ch) => supabase.removeChannel(ch))
 
-    return () => {
-      if (channel) supabase.removeChannel(channel)
-    }
-  }, [router])
+    channel = supabase
+      .channel(`bookmarks-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookmarks',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          setBookmarks((prev) => {
+            if (prev.some((b) => b.id === payload.new.id)) return prev
+            return [payload.new, ...prev]
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'bookmarks',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          setBookmarks((prev) =>
+            prev.filter((b) => b.id !== payload.old.id)
+          )
+        }
+      )
+      .subscribe()
+  }
+
+  init()
+
+  return () => {
+    isMounted = false
+    if (channel) supabase.removeChannel(channel)
+  }
+}, [])
 
   
 const addBookmark = async (e: React.FormEvent) => {
