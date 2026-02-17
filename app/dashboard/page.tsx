@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Plus, Trash2, ExternalLink, MousePointer2 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -83,42 +83,34 @@ export default function Dashboard() {
     }
   }, [router])
 
-  // ➕ ADD (Optimistic + Simple)
+  
 const addBookmark = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!title.trim() || !url.trim() || !userId) {
-    console.error("Missing fields or User ID");
-    return;
-  }
+  e.preventDefault()
+  if (!title.trim() || !url.trim() || !userId) return
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('bookmarks')
-    .insert([{ title, url, user_id: userId }])
-    .select(); // Returns the inserted row to confirm success
+    .insert([
+      { title: title.trim(), url: url.trim(), user_id: userId }
+    ])
 
   if (error) {
-    console.error('Supabase Insert Error:', error.message, error.details);
-    alert(`Save failed: ${error.message}`);
-  } else {
-    console.log('Successfully saved:', data);
-    setTitle('');
-    setUrl('');
+    alert('Error saving bookmark')
+    return
   }
-};
 
-  // ❌ DELETE (Optimistic + Simple)
+  setTitle('')
+  setUrl('')
+}
+
+  // ❌ DELETE (Realtime only – no optimistic to avoid flicker)
   const deleteBookmark = async (id: string) => {
-    const previous = bookmarks
-
-    setBookmarks((prev) => prev.filter((b) => b.id !== id))
-
     const { error } = await supabase
       .from('bookmarks')
       .delete()
       .eq('id', id)
 
     if (error) {
-      setBookmarks(previous)
       alert('Could not delete bookmark')
     }
   }

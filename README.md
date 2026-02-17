@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🔖 Smart Bookmark App
 
-## Getting Started
+A real-time, secure bookmark manager built with **Next.js (App Router)** and **Supabase**.
 
-First, run the development server:
+Users can sign in using Google OAuth, add private bookmarks, and see updates instantly across multiple tabs without refreshing the page.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 🚀 Live Demo
+
+🔗 https://smart-bookmark-app-ten-nu.vercel.app/
+
+---
+
+## 🛠 Tech Stack
+
+- **Frontend:** Next.js 16 (App Router)
+- **Authentication:** Supabase Auth (Google OAuth only)
+- **Database:** Supabase PostgreSQL
+- **Realtime:** Supabase Realtime (Postgres changes)
+- **Styling:** Tailwind CSS
+- **Animations:** Framer Motion
+- **Deployment:** Vercel
+
+---
+
+## ✨ Features
+
+### 🔐 Google Authentication
+
+- Users sign in using Google OAuth
+- No email/password login
+- Secure session handling
+
+### 📌 Private Bookmarks
+
+- Each bookmark belongs to a specific user
+- Row Level Security (RLS) ensures:
+  - User A cannot see User B’s bookmarks
+  - All queries are protected at database level
+
+### ⚡ Real-Time Updates
+
+- Uses Supabase `postgres_changes` subscription
+- If two tabs are open:
+  - Adding a bookmark in Tab A appears instantly in Tab B
+  - Deleting a bookmark in Tab B disappears instantly in Tab A
+- No page refresh required
+
+### ➕ Add Bookmark
+
+- Title + URL required
+- Instant UI update (optimistic update)
+
+### ❌ Delete Bookmark
+
+- Users can delete only their own bookmarks
+- Instant UI update
+
+### 🎨 Modern UI
+
+- Responsive grid layout
+- Dark theme
+- Smooth transitions
+
+---
+
+## 🧱 Database Structure
+
+Table: `bookmarks`
+
+| Column     | Type      | Description           |
+| ---------- | --------- | --------------------- |
+| id         | uuid      | Primary key           |
+| user_id    | uuid      | References auth.users |
+| title      | text      | Bookmark title        |
+| url        | text      | Bookmark URL          |
+| created_at | timestamp | Creation time         |
+
+---
+
+## 🔐 Row Level Security (RLS)
+
+Enabled on `bookmarks` table.
+
+Policies:
+
+- SELECT → `auth.uid() = user_id`
+- INSERT → `auth.uid() = user_id`
+- DELETE → `auth.uid() = user_id`
+
+This guarantees full user isolation at database level.
+
+---
+
+## ⚙️ How Realtime Works
+
+The dashboard subscribes to:
+
+```ts
+supabase.channel('bookmarks')
+.on('postgres_changes', ...)
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
