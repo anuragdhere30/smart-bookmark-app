@@ -15,52 +15,59 @@ export default function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null)
 
   // 1. Move fetchBookmarks to the top to fix the "Used before declaration" error
-  const fetchBookmarks = useCallback(async (uid: string) => {
-    const { data } = await supabase
-      .from('bookmarks')
-      .select('*')
-      .eq('user_id', uid)
-      .order('created_at', { ascending: false })
-    setBookmarks(data || [])
-  }, [])
+  // 1. Define the fetchBookmarks function first
+const fetchBookmarks = useCallback(async (uid: string) => {
+  const { data, error } = await supabase
+    .from('bookmarks')
+    .select('*')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false });
+  
+  if (!error) {
+    setBookmarks(data || []);
+  }
+}, []);
 
-  // 2. Single Unified Effect for Auth and Real-time
-  useEffect(() => {
-    let channel: any
+// 2. Corrected useEffect (This fixes the 'any' type and syntax errors)
+useEffect(() => {
+  let channel: any;
 
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/')
-        return
-      }
-      
-      setUserId(user.id)
-      await fetchBookmarks(user.id)
-      setLoading(false)
-
-      // CRITICAL: This is the ONLY place where the UI list updates.
-      // This ensures Tab A and Tab B stay in sync instantly.
-      channel = supabase
-        .channel(`user-bookmarks-${user.id}`)
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'bookmarks', 
-          filter: `user_id=eq.${user.id}` 
-        }, (payload) => {
-          console.log('Real-time change detected:', payload)
-          fetchBookmarks(user.id)
-        })
-        .subscribe()
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/');
+      return;
     }
+    
+    setUserId(user.id);
+    await fetchBookmarks(user.id);
+    setLoading(false);
 
-    init()
+    // REAL-TIME: This is what keeps Tab A and Tab B synced
+    channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen for ALL changes (Insert, Update, Delete)
+          schema: 'public',
+          table: 'bookmarks',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // When any change happens, re-fetch the list
+          fetchBookmarks(user.id);
+        }
+      )
+      .subscribe();
+  };
 
-    return () => {
-      if (channel) supabase.removeChannel(channel)
-    }
-  }, [router, fetchBookmarks])
+  init();
+
+  return () => {
+    if (channel) supabase.removeChannel(channel);
+  };
+}, [router, fetchBookmarks]); // Dependency array is simple and typed
 
   const addBookmark = async (e: React.FormEvent) => {
     e.preventDefault();
