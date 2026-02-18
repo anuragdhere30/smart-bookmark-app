@@ -1,7 +1,8 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+// CHANGE 'middleware' TO 'proxy' HERE
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -38,15 +39,12 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // This is the essential part for Auth
+  // Essential for Supabase Auth session management
   await supabase.auth.getUser()
 
   return response
 }
 
 export const config = {
-  // Matches all routes except static files and images
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
