@@ -38,11 +38,15 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // This is the essential part for Auth
   await supabase.auth.getUser()
 
   return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // Matches all routes except static files and images
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
